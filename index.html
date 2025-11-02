@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vaatsalya Galactic Knowledge Hub</title>
+    <!-- Load Tailwind CSS --><script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* Prevent scrolling */
+            background-color: #000; /* Black background for space */
+        }
+        #bg-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            background: radial-gradient(circle at center, #0a0a2a 0%, #000000 100%); /* Deep space gradient */
+        }
+        .text-shadow-light {
+            text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+        }
+        .content-panel-bg {
+            background-color: rgba(17, 24, 39, 0.95); /* Darker, slightly transparent panel */
+        }
+        .text-accent {
+            color: #6366F1; /* Indigo */
+        }
+    </style>
+</head>
+<body class="bg-black text-white">
+
+    <!-- 3D Canvas --><canvas id="bg-canvas"></canvas>
+
+    <!-- UI Content Overlay --><div class="absolute top-0 left-0 w-full p-6 md:p-10 flex flex-col sm:flex-row justify-between items-start z-10">
+        <div class="mb-4 sm:mb-0">
+            <h1 class="text-3xl md:text-5xl font-extrabold text-indigo-300 text-shadow-light">Vaatsalya Galactic Hub</h1>
+            <p class="text-lg md:text-xl text-gray-200 text-shadow-light mt-2">Explore the universe of knowledge and heritage.</p>
+            <p class="text-md md:text-lg text-gray-300 text-shadow-light mt-4 bg-gray-900 bg-opacity-50 p-3 rounded-lg max-w-sm hidden sm:block">
+                <strong>Controls:</strong> W/A/S/D to move, Mouse to look. Click planets for info. Press 'O' for Orbit view.
+            </p>
+        </div>
+        <nav class="flex flex-col sm:flex-row gap-2 sm:gap-4 mt-auto sm:mt-0">
+            <button data-page="about" class="page-button bg-indigo-600 text-white font-semibold py-2 px-5 rounded-full shadow-lg hover:bg-indigo-700 transition duration-200">About Us</button>
+            <button data-page="admissions" class="page-button bg-indigo-600 text-white font-semibold py-2 px-5 rounded-full shadow-lg hover:bg-indigo-700 transition duration-200">Admissions</button>
+            <button data-page="heritage" class="page-button bg-indigo-600 text-white font-semibold py-2 px-5 rounded-full shadow-lg hover:bg-indigo-700 transition duration-200">Heritage Planets</button>
+        </nav>
+    </div>
+
+    <!-- Content Panel --><div id="content-panel" class="hidden fixed top-0 right-0 h-full w-full md:w-2/5 lg:w-1/3 content-panel-bg backdrop-blur-lg text-gray-200 shadow-2xl z-40 transform translate-x-full transition-transform duration-500 ease-in-out">
+        <div class="h-full flex flex-col">
+            <div class="flex justify-between items-center p-6 border-b border-gray-700">
+                <h2 id="content-title" class="text-3xl font-bold text-indigo-400">Content Title</h2>
+                <button id="close-panel" class="text-4xl font-light text-gray-400 hover:text-white">&times;</button>
+            </div>
+            <div id="content-body" class="p-6 overflow-y-auto flex-grow text-lg">
+                <!-- Content will be injected here by JS --></div>
+        </div>
+    </div>
+
+
+    <!-- Load three.js and OrbitControls --><script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // --- Basic Setup ---
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 5, 20); // Initial camera position
+
+        const renderer = new THREE.WebGLRenderer({ 
+            canvas: document.getElementById('bg-canvas'),
+            antialias: true
+        });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.shadowMap.enabled = true; // Enable shadows
+
+        // --- Lighting ---
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.3); // Soft white light
+        scene.add(ambientLight);
+
+        const pointLight = new THREE.PointLight(0xffffee, 2, 50); // Sun-like light
+        pointLight.position.set(0, 0, 0); // Center of the galaxy
+        pointLight.castShadow = true;
+        scene.add(pointLight);
+
+        // --- Controls ---
+        let controls;
+        let isOrbitMode = true;
+
+        function setupOrbitControls() {
+            if (controls) controls.dispose();
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.autoRotate = true;
+            controls.autoRotateSpeed = 0.5;
+            controls.target.set(0, 0, 0); // Orbit around the center
+            camera.position.set(0, 5, 20);
+            camera.lookAt(0, 0, 0);
+            isOrbitMode = true;
+        }
+
+        let moveForward = false;
+        let moveBackward = false;
+        let moveLeft = false;
+        let moveRight = false;
+        let rotationX = 0;
+        let rotationY = 0;
+        const moveSpeed = 0.1;
+        const rotateSpeed = 0.002;
+
+        function setupFirstPersonControls() {
+            if (controls) controls.dispose();
+            isOrbitMode = false;
+            camera.position.set(0, 5, 20); // Reset position
+            camera.rotation.set(0, 0, 0); // Reset rotation
+            rotationX = 0;
+            rotationY = 0;
+
+            document.addEventListener('keydown', onKeyDown, false);
+            document.addEventListener('keyup', onKeyUp, false);
+            renderer.domElement.addEventListener('mousemove', onMouseMove, false);
+            renderer.domElement.requestPointerLock = renderer.domElement.requestPointerLock ||
+                                                    renderer.domElement.mozRequestPointerLock;
+            renderer.domElement.onclick = () => {
+                if (!isOrbitMode) renderer.domElement.requestPointerLock();
+            };
+        }
+
+        function onKeyDown(event) {
+            switch (event.code) {
+                case 'KeyW': moveForward = true; break;
+                case 'KeyS': moveBackward = true; break;
+                case 'KeyA': moveLeft = true; break;
+                case 'KeyD': moveRight = true; break;
+                case 'KeyO': toggleControlMode(); break; // Toggle on 'O' key
+            }
+        }
+
+        function onKeyUp(event) {
+            switch (event.code) {
+                case 'KeyW': moveForward = false; break;
+                case 'KeyS': moveBackward = false; break;
+                case 'KeyA': moveLeft = false; break;
+                case 'KeyD': moveRight = false; break;
+            }
+        }
+
+        function onMouseMove(event) {
+            if (!isOrbitMode && document.pointerLockElement === renderer.domElement) {
+                rotationY -= event.movementX * rotateSpeed;
+                rotationX -= event.movementY * rotateSpeed;
+                rotationX = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, rotationX)); // Limit vertical rotation
+                camera.rotation.order = 'YXZ'; // Yaw then Pitch
+                camera.rotation.y = rotationY;
+                camera.rotation.x = rotationX;
+            }
+        }
+
+        function updateFirstPersonControls() {
+            const direction = new THREE.Vector3();
+            camera.getWorldDirection(direction);
+
+            const right = new THREE.Vector3();
+            right.crossVectors(direction, camera.up);
+
+            if (moveForward) camera.position.addScaledVector(direction, moveSpeed);
+            if (moveBackward) camera.position.addScaledVector(direction, -moveSpeed);
+            if (moveLeft) camera.position.addScaledVector(right, -moveSpeed);
+            if (moveRight) camera.position.addScaledVector(right, moveSpeed);
+        }
+
+        function toggleControlMode() {
+            if (isOrbitMode) {
+                setupFirstPersonControls();
+                console.log("Switched to First-Person mode.");
+            } else {
+                setupOrbitControls();
+                document.removeEventListener('keydown', onKeyDown);
+                document.removeEventListener('keyup', onKeyUp);
+                renderer.domElement.removeEventListener('mousemove', onMouseMove);
+                document.exitPointerLock(); // Release pointer lock
+                console.log("Switched to Orbit mode.");
+            }
+        }
+        setupOrbitControls(); // Start with Orbit controls
+
+        // --- Materials (Universe Theme) ---
+        const starshipMaterial = new THREE.MeshStandardMaterial({ color: 0x6366F1, metalness: 0.9, roughness: 0.3, emissive: 0x6366F1, emissiveIntensity: 0.2 }); // Indigo, metallic
+        const planetMaterial1 = new THREE.MeshStandardMaterial({ color: 0x228B22, roughness: 0.9, flatShading: true }); // Forest Green
+        const planetMaterial2 = new THREE.MeshStandardMaterial({ color: 0xFFD700, roughness: 0.7 }); // Gold
+        const planetMaterial3 = new THREE.MeshStandardMaterial({ color: 0x8A2BE2, roughness: 0.6 }); // Blue Violet
+        const asteroidMaterial = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.8 });
+        
+        // FIX: Define missing materials for Sitar and Diya planets
+        const woodMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.8 }); // Saddle Brown for Sitar
+        const brassMaterial = new THREE.MeshStandardMaterial({ color: 0xB8860B, metalness: 0.8, roughness: 0.2 }); // DarkGoldenrod for Diya
+        const flameMaterial = new THREE.MeshBasicMaterial({ color: 0xFF4500, emissive: 0xFF8C00 }); // Orange/Emissive for Flame
+
+        const starMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff }); // Bright white for stars
+        const nebulaMaterial = new THREE.MeshBasicMaterial({ color: 0x8A2BE2, transparent: true, opacity: 0.2, side: THREE.DoubleSide });
+
+        // --- Background Stars ---
+        const starCount = 5000;
+        const starGeometry = new THREE.BufferGeometry();
+        const starVertices = [];
+        for (let i = 0; i < starCount; i++) {
+            const x = THREE.MathUtils.randFloatSpread(400); // spread across 400 units
+            const y = THREE.MathUtils.randFloatSpread(400);
+            const z = THREE.MathUtils.randFloatSpread(400);
+            starVertices.push(x, y, z);
+        }
+        starGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starVertices, 3));
+        const stars = new THREE.Points(starGeometry, starMaterial);
+        scene.add(stars);
+
+        // --- Nebula (simple representation) ---
+        const nebulaGeo = new THREE.SphereGeometry(150, 32, 32);
+        const nebula = new THREE.Mesh(nebulaGeo, nebulaMaterial);
+        scene.add(nebula);
+
+        // --- 1. Vaatsalya Starship (Knowledge Hub) ---
+        const starshipGroup = new THREE.Group();
+        starshipGroup.userData = { 
+            name: "The Vaatsalya Starship",
+            description: "Our school, a beacon of knowledge and kindness, journeys through the cosmos, empowering young minds to explore new frontiers of learning." 
+        };
+
+        // Main hull
+        const hullGeo = new THREE.BoxGeometry(10, 4, 10);
+        const hull = new THREE.Mesh(hullGeo, starshipMaterial);
+        hull.castShadow = true;
+        hull.receiveShadow = true;
+        starshipGroup.add(hull);
+
+        // Cockpit dome
+        const cockpitGeo = new THREE.SphereGeometry(3, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+        const cockpit = new THREE.Mesh(cockpitGeo, starshipMaterial);
+        cockpit.position.y = 2; // On top of hull
+        cockpit.castShadow = true;
+        starshipGroup.add(cockpit);
+        
+        starshipGroup.position.set(0, 0, 0); // Center of the scene
+        scene.add(starshipGroup);
+
+        // --- 2. History Planet (Pillar Planet) ---
+        const historyPlanetGroup = new THREE.Group();
+        historyPlanetGroup.userData = {
+            name: "Planet of Ancient Wisdom",
+            description: "A world reflecting India's profound history, where ancient pillars stand tall, telling tales of empires, philosophies, and timeless legacies."
+        };
+        const histPlanetBody = new THREE.Mesh(new THREE.SphereGeometry(3, 32, 32), planetMaterial1);
+        histPlanetBody.castShadow = true;
+        historyPlanetGroup.add(histPlanetBody);
+
+        const smallPillarGeo = new THREE.CylinderGeometry(0.2, 0.2, 2, 8);
+        const smallPillar = new THREE.Mesh(smallPillarGeo, asteroidMaterial);
+        smallPillar.position.y = 2.5;
+        smallPillar.castShadow = true;
+        historyPlanetGroup.add(smallPillar);
+        
+        historyPlanetGroup.position.set(15, 5, -10);
+        scene.add(historyPlanetGroup);
+
+        // --- 3. Culture Planet (Sitar Planet) ---
+        const culturePlanetGroup = new THREE.Group();
+        culturePlanetGroup.userData = {
+            name: "Planet of Harmonious Arts",
+            description: "A vibrant world pulsating with the rhythms and melodies of Indian culture. Here, music, dance, and art flourish, connecting spirits across the galaxy."
+        };
+        const cultPlanetBody = new THREE.Mesh(new THREE.SphereGeometry(2.5, 32, 32), planetMaterial2);
+        cultPlanetBody.castShadow = true;
+        culturePlanetGroup.add(cultPlanetBody);
+
+        const tinySitarBody = new THREE.Mesh(new THREE.SphereGeometry(0.8, 16, 8), woodMaterial);
+        tinySitarBody.position.set(0, 1.8, 0);
+        tinySitarBody.castShadow = true;
+        culturePlanetGroup.add(tinySitarBody);
+
+        const tinySitarNeck = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.05, 3, 8), woodMaterial);
+        tinySitarNeck.position.set(0.5, 2.5, 0);
+        tinySitarNeck.rotation.z = Math.PI / 4;
+        tinySitarNeck.castShadow = true;
+        culturePlanetGroup.add(tinySitarNeck);
+
+        culturePlanetGroup.position.set(-18, -2, 8);
+        scene.add(culturePlanetGroup);
+
+        // --- 4. Tradition Planet (Diya Planet) ---
+        const traditionPlanetGroup = new THREE.Group();
+        traditionPlanetGroup.userData = {
+            name: "Planet of Enduring Traditions",
+            description: "A serene world illuminated by the light of countless Diyas, symbolizing the continuous flame of Indian traditions, wisdom, and spiritual values."
+        };
+        const tradPlanetBody = new THREE.Mesh(new THREE.SphereGeometry(2, 32, 32), planetMaterial3);
+        tradPlanetBody.castShadow = true;
+        traditionPlanetGroup.add(tradPlanetBody);
+
+        const tinyDiya = new THREE.Mesh(new THREE.SphereGeometry(0.5, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), brassMaterial);
+        tinyDiya.position.y = 1.2;
+        tinyDiya.castShadow = true;
+        traditionPlanetGroup.add(tinyDiya);
+
+        const tinyFlame = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.4, 8), flameMaterial);
+        tinyFlame.position.y = 1.5;
+        traditionPlanetGroup.add(tinyFlame);
+        traditionPlanetGroup.flame = tinyFlame;
+
+        traditionPlanetGroup.position.set(10, -8, 15);
+        scene.add(traditionPlanetGroup);
+        
+        // --- 5. Knowledge Asteroid Field (Books) ---
+        const knowledgeAsteroidGroup = new THREE.Group();
+        knowledgeAsteroidGroup.userData = {
+            name: "Knowledge Asteroid Belt",
+            description: "A dense field of knowledge-filled asteroids (books) orbiting the Starship, representing the vast and ever-expanding library of learning at Vaatsalya."
+        };
+
+        const asteroidCount = 20;
+        for (let i = 0; i < asteroidCount; i++) {
+            const size = Math.random() * 0.8 + 0.3;
+            const asteroidGeo = new THREE.DodecahedronGeometry(size, 0); // Irregular shape
+            const asteroid = new THREE.Mesh(asteroidGeo, asteroidMaterial);
+            
+            const angle = (i / asteroidCount) * Math.PI * 2;
+            const radius = 8 + Math.random() * 5; // Orbit around starship
+            asteroid.position.x = Math.cos(angle) * radius;
+            asteroid.position.z = Math.sin(angle) * radius;
+            asteroid.position.y = Math.random() * 4 - 2; // Spread vertically
+            
+            asteroid.rotation.x = Math.random() * Math.PI;
+            asteroid.rotation.y = Math.random() * Math.PI;
+            asteroid.rotation.z = Math.random() * Math.PI;
+            
+            asteroid.castShadow = true;
+            knowledgeAsteroidGroup.add(asteroid);
+        }
+        knowledgeAsteroidGroup.position.set(0,0,0); // Relative to starship
+        scene.add(knowledgeAsteroidGroup);
+
+        // Group interactive objects for raycasting
+        const interactiveObjects = [
+            starshipGroup, 
+            historyPlanetGroup, 
+            culturePlanetGroup, 
+            traditionPlanetGroup, 
+            knowledgeAsteroidGroup
+        ];
+
+
+        // --- Page Content Data ---
+        const pageContent = {
+            "about": {
+                title: "About Vaatsalya",
+                body: `
+                    <h3 class="text-2xl font-semibold mb-3 text-indigo-400">Charting New Courses in Education</h3>
+                    <p class="mb-4 text-lg">The Vaatsalya Community School, our starship of learning, navigates the cosmos with scientific principles at its core. We are a not-for-profit institution dedicated to comprehensive education and continuous innovation.</p>
+                    <p class="mb-4 text-lg">Like a guiding star, Vaatsalya welcomes all children, regardless of background or ability. Our mission is to foster a healthy environment where curiosity thrives and the love for learning is an endless journey.</p>
+                    <h3 class="text-2xl font-semibold mb-3 mt-6 text-indigo-400">Our Galactic Directives (Core Values)</h3>
+                    <ul class="list-disc list-inside space-y-2 text-lg">
+                        <li><strong>Empathy Orbit:</strong> Cultivating kindness, respect, and compassion among all crew members.</li>
+                        <li><strong>Creative Constellations:</strong> Sparking imagination and critical thinking through innovative programs.</li>
+                        <li><strong>Emotional Shield:</strong> Providing a safe and supportive space for emotional growth and expression.</li>
+                        <li><strong>Innovation Drive:</strong> Fueling inquiry-based learning, problem-solving, and pioneering new solutions.</li>
+                    </ul>
+                `
+            },
+            "admissions": {
+                title: "Galactic Admissions",
+                body: `
+                    <h3 class="2xl font-semibold mb-3 text-indigo-400">Join Our Cosmic Crew</h3>
+                    <p class="mb-4 text-lg">We are seeking aspiring young astronauts to join our Vaatsalya Starship. Our admission protocols are transparent, focusing on your child's potential to shine among the stars, not on earthly gains.</p>
+                    <p class="mb-4 text-lg">As a non-profit educational vessel, our primary focus is to equip every child with the tools to navigate their unique journey.</p>
+                    <h3 class="text-2xl font-semibold mb-3 mt-6 text-indigo-400">Embarkation Protocol (How to Apply)</h3>
+                    <ol class="list-decimal list-inside space-y-2 text-lg">
+                        <li><strong>Transmissions:</strong> Contact our Starship Admissions Control via subspace email or comm-link for initial inquiries.</li>
+                        <li><strong>Virtual Tour:</strong> Experience our campus virtually, or via this immersive 3D gateway, to feel the Vaatsalya energy.</li>
+                        <li><strong>Manifest Submission:</strong> Complete and submit the required application manifest.</li>
+                        <li><strong>Pilot Briefing:</strong> A friendly interaction with the prospective cadet and guardians to understand aspirations.</li>
+                    </ol>
+                    <p class="mt-6 text-lg">For more information, transmit your queries to: <br><strong>Comms:</strong> admin@vaatsalyacommunityschool.co.in<br><strong>Comms-Link:</strong> +91 87557 04700</p>
+                `
+            },
+            "heritage": {
+                title: "Cosmic Heritage Tour",
+                body: `
+                    <p class="mb-4 text-lg">Our journey through the galaxy is enriched by the echoes of India's glorious past, vibrant culture, and enduring traditions. These celestial bodies around us each tell a part of that story.</p>
+                    <p class="mb-4 text-lg"><strong>Fly towards any planet or asteroid cluster and click it to discover its cosmic heritage!</strong></p>
+                    <div id="heritage-detail" class="mt-6 p-4 bg-gray-800 rounded-lg border border-indigo-600">
+                        <p class="text-lg text-gray-300">Awaiting your cosmic discovery...</p>
+                    </div>
+                `
+            }
+        };
+
+        // --- Interactivity (Raycaster) ---
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        function onMouseClick(event) {
+            // Only trigger object interaction in First-Person mode to avoid conflict with OrbitControls clicks
+            if (isOrbitMode && controls.autoRotate) {
+                // If auto-rotate is on, a click is usually for interaction, not just rotation
+                // Allow it to function if not currently rotating from a drag
+            } else if (isOrbitMode && !controls.autoRotate) {
+                // If in orbit mode but auto-rotate off, we expect controls to handle it
+                return;
+            }
+
+
+            // Calculate mouse position in normalized device coordinates
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+
+            // Check for intersections
+            const intersects = raycaster.intersectObjects(interactiveObjects, true);
+
+            if (intersects.length > 0) {
+                let clickedObject = intersects[0].object;
+                // Traverse up to find the main group with userData
+                while (clickedObject && !clickedObject.userData.name && clickedObject !== scene) {
+                    clickedObject = clickedObject.parent;
+                }
+
+                if (clickedObject && clickedObject.userData.name) {
+                    showPage('heritage', clickedObject.userData);
+                }
+            }
+        }
+        window.addEventListener('click', onMouseClick);
+
+
+        // --- Content Panel Controls ---
+        const contentPanel = document.getElementById('content-panel');
+        const contentTitle = document.getElementById('content-title');
+        const contentBody = document.getElementById('content-body');
+        const closePanelButton = document.getElementById('close-panel');
+        const navButtons = document.querySelectorAll('.page-button');
+
+        function showPage(pageId, data = null) {
+            const content = pageContent[pageId];
+            if (!content) return;
+
+            contentTitle.textContent = content.title;
+            contentBody.innerHTML = content.body;
+
+            if (pageId === 'heritage' && data) {
+                const detailBox = contentBody.querySelector('#heritage-detail');
+                if (detailBox) {
+                    detailBox.innerHTML = `
+                        <h3 class="text-2xl font-semibold mb-2 text-indigo-400">${data.name}</h3>
+                        <p class="text-lg text-gray-300">${data.description}</p>
+                    `;
+                }
+            }
+            
+            contentPanel.classList.remove('hidden');
+            setTimeout(() => {
+                contentPanel.classList.remove('translate-x-full');
+            }, 10);
+        }
+
+        function hidePage() {
+            contentPanel.classList.add('translate-x-full');
+            setTimeout(() => {
+                contentPanel.classList.add('hidden');
+            }, 500);
+        }
+
+        navButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                const pageId = button.getAttribute('data-page');
+                showPage(pageId);
+            });
+        });
+
+        closePanelButton.addEventListener('click', hidePage);
+
+
+        // --- Responsive Resize ---
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        window.addEventListener('resize', onWindowResize);
+
+        // --- Animation Loop ---
+        const clock = new THREE.Clock();
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const elapsedTime = clock.getElapsedTime();
+
+            // Animate nebula
+            nebula.rotation.y += 0.0005;
+
+            // Animate tradition planet flame
+            if (traditionPlanetGroup.flame) {
+                traditionPlanetGroup.flame.scale.y = 1 + Math.sin(elapsedTime * 10) * 0.1;
+                traditionPlanetGroup.flame.scale.x = 1 + Math.cos(elapsedTime * 9) * 0.05;
+            }
+
+            // Animate knowledge asteroids
+            knowledgeAsteroidGroup.children.forEach((asteroid, index) => {
+                asteroid.rotation.x += 0.01 + (index * 0.0001);
+                asteroid.rotation.y += 0.005 + (index * 0.0002);
+            });
+
+            // If in first-person mode, update camera based on keyboard/mouse
+            if (!isOrbitMode) {
+                updateFirstPersonControls();
+            } else {
+                controls.update(); // Update controls (for damping and auto-rotate)
+            }
+            
+            renderer.render(scene, camera);
+        }
+
+        animate(); // Start the loop
+    </script>
+</body>
+</html>
